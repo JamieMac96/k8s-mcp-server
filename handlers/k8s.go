@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/reza-gholizade/k8s-mcp-server/pkg/k8s"
 
@@ -32,6 +33,60 @@ func getRequiredStringArg(args map[string]interface{}, key string) (string, erro
 		return "", fmt.Errorf("missing required parameter: %s", key)
 	}
 	return val, nil
+}
+
+// extractFieldValue extracts a value from a nested map using a dot-separated path.
+// For example, "metadata.name" will extract obj["metadata"]["name"]
+func extractFieldValue(obj map[string]interface{}, path string) (interface{}, bool) {
+	parts := strings.Split(path, ".")
+	current := interface{}(obj)
+
+	for _, part := range parts {
+		switch v := current.(type) {
+		case map[string]interface{}:
+			var ok bool
+			current, ok = v[part]
+			if !ok {
+				return nil, false
+			}
+		default:
+			return nil, false
+		}
+	}
+	return current, true
+}
+
+// setFieldValue sets a value in a nested map using a dot-separated path.
+// It creates intermediate maps as needed.
+func setFieldValue(obj map[string]interface{}, path string, value interface{}) {
+	parts := strings.Split(path, ".")
+	current := obj
+
+	for i := 0; i < len(parts)-1; i++ {
+		part := parts[i]
+		if _, ok := current[part]; !ok {
+			current[part] = make(map[string]interface{})
+		}
+		current = current[part].(map[string]interface{})
+	}
+
+	current[parts[len(parts)-1]] = value
+}
+
+// projectFields returns a new map containing only the specified field paths.
+// If fieldPaths is empty, returns the original object.
+func projectFields(obj map[string]interface{}, fieldPaths []string) map[string]interface{} {
+	if len(fieldPaths) == 0 {
+		return obj
+	}
+
+	result := make(map[string]interface{})
+	for _, path := range fieldPaths {
+		if value, ok := extractFieldValue(obj, path); ok {
+			setFieldValue(result, path, value)
+		}
+	}
+	return result
 }
 
 // GetAPIResources returns a handler function for the getAPIResources tool.
@@ -68,9 +123,13 @@ func GetAPIResources(client *k8s.Client) func(ctx context.Context, request mcp.C
 
 // ListResources returns a handler function for the listResources tool.
 // It lists resources in the Kubernetes cluster based on the provided kind,
-// namespace, and labelSelector. The result is serialized to JSON and returned.
+// namespace, and labelSelector. Supports field projection via fieldPaths
+// to limit the size of returned data. The result is serialized to JSON and returned.
 func ListResources(client *k8s.Client) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// LOG: Print incoming ListResources request arguments for debugging
+		fmt.Printf("[ListResources] Received request: Arguments=%#v\n", request.Params.Arguments)
+
 		// Extract arguments - using capital K to match your tools definition
 		args, ok := request.Params.Arguments.(map[string]interface{})
 		if !ok {
@@ -84,12 +143,31 @@ func ListResources(client *k8s.Client) func(ctx context.Context, request mcp.Cal
 
 		namespace := getStringArg(args, "namespace", "")
 		labelSelector := getStringArg(args, "labelSelector", "")
-		fieldSelector := getStringArg(args, "fieldSelector", "")
+		fieldPathsStr := getStringArg(args, "fieldPaths", "")
 
-		// Fetch resources
-		resources, err := client.ListResources(ctx, kind, namespace, labelSelector, fieldSelector)
+		// Parse fieldPaths if provided
+		var fieldPaths []string
+		if fieldPathsStr != "" {
+			fieldPaths = strings.Split(fieldPathsStr, ",")
+			// Trim whitespace from each path
+			for i, path := range fieldPaths {
+				fieldPaths[i] = strings.TrimSpace(path)
+			}
+		}
+
+		// Fetch resources (no fieldSelector, pass empty string)
+		resources, err := client.ListResources(ctx, kind, namespace, labelSelector, "")
 		if err != nil {
 			return nil, fmt.Errorf("failed to list resources for kind '%s': %w", kind, err)
+		}
+
+		// Apply field projection if fieldPaths is specified
+		if len(fieldPaths) > 0 {
+			projectedResources := make([]map[string]interface{}, len(resources))
+			for i, resource := range resources {
+				projectedResources[i] = projectFields(resource, fieldPaths)
+			}
+			resources = projectedResources
 		}
 
 		// Serialize response to JSON

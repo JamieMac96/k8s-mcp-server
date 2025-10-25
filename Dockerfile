@@ -30,18 +30,29 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
 # Use a minimal base image instead of scratch for better compatibility
 FROM alpine:latest
 
-# Install ca-certificates and curl for health checks
-RUN apk --no-cache add ca-certificates curl
+# Install ca-certificates, curl for health checks, and kubectl
+RUN apk --no-cache add ca-certificates curl && \
+    # Install kubectl
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+    chmod +x kubectl && \
+    mv kubectl /usr/local/bin/
 
 # Create a non-root user
 RUN addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
+
+# Create .kube directory for appuser and set proper ownership
+RUN mkdir -p /home/appuser/.kube && \
+    chown -R appuser:appgroup /home/appuser/.kube
 
 # Copy the binary from the builder stage
 COPY --from=builder /app/k8s-mcp-server /usr/local/bin/k8s-mcp-server
 
 # Make the binary executable
 RUN chmod +x /usr/local/bin/k8s-mcp-server
+
+# Set KUBECONFIG environment variable to use the default config location
+ENV KUBECONFIG=/home/appuser/.kube/config
 
 # Switch to non-root user
 USER appuser

@@ -29,15 +29,17 @@ func GetAPIResourcesTool() mcp.Tool {
 
 // ListResourcesTool creates a tool for listing resources of a specific type.
 // It defines the tool's name, description, and parameters for kind, namespace,
-// and labelSelector.
+// labelSelector, and fieldPaths for limiting returned data.
 func ListResourcesTool() mcp.Tool {
 	return mcp.NewTool(
 		"listResources",
-		mcp.WithDescription("List all resources in the Kubernetes cluster of a specific type"),
+		mcp.WithDescription("List all resources in the Kubernetes cluster of a specific type. "+
+			"Use fieldPaths to limit the size of returned data by specifying which fields to include."),
 		mcp.WithString("Kind", mcp.Required(), mcp.Description("The type of resource to list")),
 		mcp.WithString("namespace", mcp.Description("The namespace to list resources in")),
 		mcp.WithString("labelSelector", mcp.Description("A label selector to filter resources")),
-		mcp.WithString("fieldSelector", mcp.Description("A field selector to filter resources")),
+		mcp.WithString("fieldPaths", mcp.Description("Comma-separated list of JSON paths to include in response (e.g. 'metadata.name,metadata.namespace,status.phase'). "+
+			"If not specified, full objects are returned. Use this to reduce response size and prevent timeouts.")),
 	)
 }
 

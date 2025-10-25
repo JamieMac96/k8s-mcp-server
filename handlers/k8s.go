@@ -162,7 +162,7 @@ func ListResources(client *k8s.Client) func(ctx context.Context, request mcp.Cal
 		}
 
 		// Apply field projection if fieldPaths is specified
-		if len(fieldPaths) > 0 {
+		if len(fieldPaths) > 0 && len(resources) > 0 {
 			projectedResources := make([]map[string]interface{}, len(resources))
 			for i, resource := range resources {
 				projectedResources[i] = projectFields(resource, fieldPaths)

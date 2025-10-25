@@ -172,13 +172,7 @@ func (c *Client) ListResources(ctx context.Context, kind, namespace, labelSelect
 
 	var resources []map[string]interface{}
 	for _, item := range list.Items {
-		metadata := item.GetLabels()
-		resources = append(resources, map[string]interface{}{
-			"name":      item.GetName(),
-			"kind":      item.GetKind(),
-			"namespace": item.GetNamespace(),
-			"labels":    metadata,
-		})
+		resources = append(resources, item.UnstructuredContent())
 	}
 
 	return resources, nil

@@ -337,6 +337,7 @@ func TestGetResources(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected TextContent in list result")
 	}
+	
 	var pods []map[string]interface{}
 	if err := json.Unmarshal([]byte(textContent.Text), &pods); err != nil {
 		t.Fatalf("Failed to parse pods: %v", err)
@@ -346,8 +347,18 @@ func TestGetResources(t *testing.T) {
 		t.Skip("No pods found in kube-system namespace, skipping GetResources test")
 	}
 
-	// Get the first pod's name
-	podName := pods[0]["metadata"].(map[string]interface{})["name"].(string)
+	// Get the first pod's name from the projected response
+	// The response should have metadata.name due to field projection
+	var podName string
+	if metadata, ok := pods[0]["metadata"].(map[string]interface{}); ok {
+		if name, ok := metadata["name"].(string); ok {
+			podName = name
+		} else {
+			t.Fatalf("Pod metadata.name is not a string: %#v", metadata)
+		}
+	} else {
+		t.Fatalf("Failed to extract pod metadata from response. First pod: %#v", pods[0])
+	}
 
 	t.Run("Get specific pod", func(t *testing.T) {
 		request := mcp.CallToolRequest{

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -540,9 +541,9 @@ func (c *Client) GetNodeMetrics(ctx context.Context, nodeName string) (map[strin
 }
 
 // GetEvents retrieves events for a specific namespace or all namespaces.
-// It uses the corev1 clientset to fetch events.
+// It uses the corev1 clientset to fetch events, sorts them, and limits the results.
 // Returns a slice of maps, each representing an event, or an error.
-func (c *Client) GetEvents(ctx context.Context, namespace string) ([]map[string]interface{}, error) {
+func (c *Client) GetEvents(ctx context.Context, namespace string, maxEvents int, sortBy string) ([]map[string]interface{}, error) {
 	var eventList *corev1.EventList
 	var err error
 
@@ -569,6 +570,27 @@ func (c *Client) GetEvents(ctx context.Context, namespace string) ([]map[string]
 			"lastTime":  event.LastTimestamp.Time,
 		})
 	}
+
+	// Sort events based on sortBy parameter (descending order - most recent first)
+	sort.Slice(events, func(i, j int) bool {
+		var timeI, timeJ time.Time
+		
+		if sortBy == "firstTime" {
+			timeI = events[i]["firstTime"].(time.Time)
+			timeJ = events[j]["firstTime"].(time.Time)
+		} else { // default to lastTime
+			timeI = events[i]["lastTime"].(time.Time)
+			timeJ = events[j]["lastTime"].(time.Time)
+		}
+		
+		return timeI.After(timeJ) // Descending order (most recent first)
+	})
+
+	// Limit the number of events returned
+	if maxEvents > 0 && len(events) > maxEvents {
+		events = events[:maxEvents]
+	}
+
 	return events, nil
 }
 

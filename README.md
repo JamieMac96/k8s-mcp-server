@@ -309,14 +309,15 @@ Retrieves all available API resources in the Kubernetes cluster.
 
 #### 2. `listResources`
 
-Lists all instances of a specific resource type.
+Lists all instances of a specific resource type. Supports field projection to reduce response size.
 
 **Parameters:**
 - `Kind` (string, required): The kind of resource to list (e.g., "Pod", "Deployment").
 - `namespace` (string, optional): The namespace to list resources from. If omitted, lists across all namespaces for namespaced resources (subject to RBAC).
 - `labelSelector` (string, optional): Filter resources by label selector (e.g., "app=nginx,env=prod").
+- `fieldPaths` (string, optional): Comma-separated list of JSON paths to include in response (e.g., "metadata.name,status.phase"). If not specified, full objects are returned. Use this to reduce response size and prevent timeouts.
 
-**Example:**
+**Example (basic):**
 ```json
 {
   "jsonrpc": "2.0",
@@ -333,16 +334,51 @@ Lists all instances of a specific resource type.
 }
 ```
 
+**Example (with field projection):**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "listResources",
+    "arguments": {
+      "Kind": "Pod",
+      "namespace": "default",
+      "fieldPaths": "metadata.name,metadata.namespace,status.phase"
+    }
+  }
+}
+```
+
+**n8n Example:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",     
+  "params": {
+    "name": "listResources",
+    "arguments": {
+      "Kind": "{{ $fromAI("Kind", "the selected resource type") }}",
+      "namespace": "{{ $fromAI("namespace", "the requested namespace if any") }}",
+      "fieldPaths": "{{ $fromAI("fieldPaths", "comma-separated list of field paths to include (e.g. 'metadata.name,metadata.namespace,status.phase'), leave empty for full objects", "", "string", false) }}"
+    }
+  }
+}
+```
+
 #### 3. `getResource`
 
-Retrieves detailed information about a specific resource.
+Retrieves detailed information about a specific resource. Supports field projection to reduce response size.
 
 **Parameters:**
 - `kind` (string, required): The kind of resource to get (e.g., "Pod", "Deployment").
 - `name` (string, required): The name of the resource to get.
 - `namespace` (string, optional): The namespace of the resource (required for namespaced resources).
+- `fieldPaths` (string, optional): Comma-separated list of JSON paths to include in response (e.g., "metadata.name,status.phase"). If not specified, full object is returned. Use this to reduce response size.
 
-**Example:**
+**Example (basic):**
 ```json
 {
   "jsonrpc": "2.0",
@@ -354,6 +390,42 @@ Retrieves detailed information about a specific resource.
       "kind": "Pod",
       "name": "nginx-pod",
       "namespace": "default"
+    }
+  }
+}
+```
+
+**Example (with field projection):**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "getResource",
+    "arguments": {
+      "kind": "Pod",
+      "name": "nginx-pod",
+      "namespace": "default",
+      "fieldPaths": "metadata.name,status.phase,status.containerStatuses"
+    }
+  }
+}
+```
+
+**n8n Example:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",     
+  "params": {
+    "name": "getResource",
+    "arguments": {
+      "kind": "{{ $fromAI("kind", "the resource type") }}",
+      "name": "{{ $fromAI("name", "the resource name") }}",
+      "namespace": "{{ $fromAI("namespace", "the namespace if any") }}",
+      "fieldPaths": "{{ $fromAI("fieldPaths", "comma-separated field paths like 'metadata.name,status.phase', leave empty for full object", "", "string", false) }}"
     }
   }
 }
@@ -461,14 +533,27 @@ Retrieves CPU and Memory metrics for a specific pod.
 
 #### 8. `getEvents`
 
-Retrieves events for a specific namespace or resource.
+Retrieves events from the Kubernetes cluster. Returns the most recent events by default, sorted and limited.
 
 **Parameters:**
-- `namespace` (string, optional): The namespace to get events from. If omitted, events from all namespaces are considered (subject to RBAC).
-- `resourceName` (string, optional): The name of a specific resource (e.g., a Pod name) to filter events for.
-- `resourceKind` (string, optional): The kind of the specific resource (e.g., "Pod") if `resourceName` is provided.
+- `namespace` (string, optional): The namespace to get events from. If omitted, events from all namespaces are returned (subject to RBAC).
+- `maxEvents` (number, optional): Maximum number of events to return. Defaults to 20.
+- `sortBy` (string, optional): Field to sort events by. Options: `lastTime` (default), `firstTime`. Events are returned in descending order (most recent first).
 
-**Example (Namespace Events):**
+**Example (default - most recent 20 events):**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "getEvents",
+    "arguments": {}
+  }
+}
+```
+
+**Example (namespace with custom limit):**
 ```json
 {
   "jsonrpc": "2.0",
@@ -477,13 +562,14 @@ Retrieves events for a specific namespace or resource.
   "params": {
     "name": "getEvents",
     "arguments": {
-      "namespace": "default"
+      "namespace": "default",
+      "maxEvents": 50
     }
   }
 }
 ```
 
-**Example (Resource Events):**
+**Example (sorted by firstTime):**
 ```json
 {
   "jsonrpc": "2.0",
@@ -492,9 +578,25 @@ Retrieves events for a specific namespace or resource.
   "params": {
     "name": "getEvents",
     "arguments": {
-      "namespace": "production",
-      "resourceName": "my-app-pod-12345",
-      "resourceKind": "Pod"
+      "sortBy": "firstTime",
+      "maxEvents": 10
+    }
+  }
+}
+```
+
+**n8n Example:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",     
+  "params": {
+    "name": "getEvents",
+    "arguments": {
+      "namespace": "{{ $fromAI("namespace", "the namespace to get events from, leave empty for all namespaces", "", "string", false) }}",
+      "maxEvents": "{{ $fromAI("maxEvents", "maximum number of events to return", 20, "number", false) }}",
+      "sortBy": "{{ $fromAI("sortBy", "sort by 'lastTime' or 'firstTime'", "lastTime", "string", false) }}"
     }
   }
 }

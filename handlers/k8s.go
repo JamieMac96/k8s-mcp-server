@@ -183,7 +183,8 @@ func ListResources(client *k8s.Client) func(ctx context.Context, request mcp.Cal
 
 // GetResources returns a handler function for the getResource tool.
 // It retrieves a specific resource from the Kubernetes cluster based on the
-// provided kind, name, and namespace. The result is serialized to JSON and returned.
+// provided kind, name, and namespace. Supports field projection via fieldPaths
+// to limit the size of returned data. The result is serialized to JSON and returned.
 func GetResources(client *k8s.Client) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, ok := request.Params.Arguments.(map[string]interface{})
@@ -202,10 +203,26 @@ func GetResources(client *k8s.Client) func(ctx context.Context, request mcp.Call
 		}
 
 		namespace := getStringArg(args, "namespace", "")
+		fieldPathsStr := getStringArg(args, "fieldPaths", "")
+
+		// Parse fieldPaths if provided
+		var fieldPaths []string
+		if fieldPathsStr != "" {
+			fieldPaths = strings.Split(fieldPathsStr, ",")
+			// Trim whitespace from each path
+			for i, path := range fieldPaths {
+				fieldPaths[i] = strings.TrimSpace(path)
+			}
+		}
 
 		resource, err := client.GetResource(ctx, kind, name, namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get resource '%s' of kind '%s': %w", name, kind, err)
+		}
+
+		// Apply field projection if fieldPaths is specified
+		if len(fieldPaths) > 0 {
+			resource = projectFields(resource, fieldPaths)
 		}
 
 		jsonResponse, err := json.Marshal(resource)
@@ -359,7 +376,7 @@ func GetPodMetrics(client *k8s.Client) func(ctx context.Context, request mcp.Cal
 
 // GetEvents returns a handler function for the getEvents tool.
 // It retrieves events from the Kubernetes cluster based on the provided
-// namespace and labelSelector. The result is serialized to JSON and returned.
+// namespace, maxEvents, and sortBy parameters. The result is serialized to JSON and returned.
 func GetEvents(client *k8s.Client) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args, ok := request.Params.Arguments.(map[string]interface{})
@@ -368,8 +385,15 @@ func GetEvents(client *k8s.Client) func(ctx context.Context, request mcp.CallToo
 		}
 
 		namespace := getStringArg(args, "namespace", "")
+		sortBy := getStringArg(args, "sortBy", "lastTime")
+		
+		// Get maxEvents with default of 20
+		maxEvents := 20
+		if val, ok := args["maxEvents"].(float64); ok {
+			maxEvents = int(val)
+		}
 
-		events, err := client.GetEvents(ctx, namespace)
+		events, err := client.GetEvents(ctx, namespace, maxEvents, sortBy)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get events: %w", err)
 		}

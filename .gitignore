@@ -3,3 +3,4 @@ node_modules
 *.js
 package-lock.json
 package.json
+k8s-mcp-server

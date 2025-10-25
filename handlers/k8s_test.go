@@ -401,6 +401,73 @@ func TestGetResources(t *testing.T) {
 
 		t.Logf("Successfully retrieved pod: %s", podName)
 	})
+
+	t.Run("Get specific pod with field projection", func(t *testing.T) {
+		request := mcp.CallToolRequest{
+			Params: mcp.CallToolParams{
+				Name: "getResource",
+				Arguments: map[string]interface{}{
+					"kind":       "Pod",
+					"name":       podName,
+					"namespace":  "kube-system",
+					"fieldPaths": "metadata.name,metadata.namespace,status.phase",
+				},
+			},
+		}
+
+		result, err := handler(ctx, request)
+		if err != nil {
+			t.Fatalf("Failed to get pod with field projection: %v", err)
+		}
+
+		if result == nil {
+			t.Fatal("Expected result but got nil")
+		}
+
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		if !ok {
+			t.Fatal("Expected TextContent in result")
+		}
+		var pod map[string]interface{}
+		if err := json.Unmarshal([]byte(textContent.Text), &pod); err != nil {
+			t.Fatalf("Failed to parse pod: %v", err)
+		}
+
+		// Verify only projected fields are present
+		if metadata, ok := pod["metadata"].(map[string]interface{}); !ok {
+			t.Error("Expected metadata field")
+		} else {
+			if name, ok := metadata["name"].(string); !ok || name != podName {
+				t.Errorf("Expected pod name %s, got %v", podName, name)
+			}
+			if namespace, ok := metadata["namespace"].(string); !ok || namespace != "kube-system" {
+				t.Errorf("Expected namespace kube-system, got %v", namespace)
+			}
+			// Verify other metadata fields are NOT present
+			if _, ok := metadata["uid"]; ok {
+				t.Error("Did not expect uid field in projected response")
+			}
+		}
+
+		if status, ok := pod["status"].(map[string]interface{}); !ok {
+			t.Error("Expected status field")
+		} else {
+			if _, ok := status["phase"]; !ok {
+				t.Error("Expected status.phase field")
+			}
+			// Verify other status fields are NOT present
+			if _, ok := status["conditions"]; ok {
+				t.Error("Did not expect status.conditions field in projected response")
+			}
+		}
+
+		// Verify spec is NOT present
+		if _, ok := pod["spec"]; ok {
+			t.Error("Did not expect spec field in projected response")
+		}
+
+		t.Logf("Successfully retrieved pod with field projection: %s", podName)
+	})
 }
 
 // TestGetAPIResources tests listing API resources

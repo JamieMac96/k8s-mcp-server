@@ -1,7 +1,7 @@
 # Field Projection Feature
 
 ## Overview
-The `listResources` tool now supports field projection via the `fieldPaths` parameter. This allows you to specify exactly which fields to return from each resource, dramatically reducing response size and preventing LLM timeouts.
+The `listResources` and `getResource` tools now support field projection via the `fieldPaths` parameter. This allows you to specify exactly which fields to return from resources, dramatically reducing response size and preventing LLM timeouts.
 
 ## How It Works
 
@@ -73,14 +73,23 @@ Returns only:
 }
 ```
 
-### 4. Combine with filtering
+### 4. Combine with filtering (listResources only)
 ```json
 {
   "Kind": "pods",
   "namespace": "default",
   "labelSelector": "app=nginx",
-  "fieldSelector": "status.phase=Running",
   "fieldPaths": "metadata.name,status.podIP,status.hostIP"
+}
+```
+
+### 5. Get a specific resource with field projection
+```json
+{
+  "kind": "pod",
+  "name": "my-pod",
+  "namespace": "default",
+  "fieldPaths": "metadata.name,status.phase,status.containerStatuses"
 }
 ```
 

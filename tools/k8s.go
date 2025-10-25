@@ -45,14 +45,17 @@ func ListResourcesTool() mcp.Tool {
 
 // GetResourcesTool creates a tool for getting a specific resource.
 // It defines the tool's name, description, and parameters for kind, name,
-// and namespace.
+// namespace, and fieldPaths for limiting returned data.
 func GetResourcesTool() mcp.Tool {
 	return mcp.NewTool(
 		"getResource",
-		mcp.WithDescription("Get a specific resource in the Kubernetes cluster"),
+		mcp.WithDescription("Get a specific resource in the Kubernetes cluster. "+
+			"Use fieldPaths to limit the size of returned data by specifying which fields to include."),
 		mcp.WithString("kind", mcp.Required(), mcp.Description("The type of resource to get")),
 		mcp.WithString("name", mcp.Required(), mcp.Description("The name of the resource to get")),
 		mcp.WithString("namespace", mcp.Description("The namespace of the resource")),
+		mcp.WithString("fieldPaths", mcp.Description("Comma-separated list of JSON paths to include in response (e.g. 'metadata.name,metadata.namespace,status.phase'). "+
+			"If not specified, full object is returned. Use this to reduce response size.")),
 	)
 }
 
@@ -105,14 +108,15 @@ func GetPodMetricsTool() mcp.Tool {
 }
 
 // GetEventsTool creates a tool for getting events in the Kubernetes cluster.
-// It defines the tool's name, description, and parameters for the namespace
-// and labelSelector.
+// It defines the tool's name, description, and parameters for the namespace,
+// maxEvents, and sortBy.
 func GetEventsTool() mcp.Tool {
 	return mcp.NewTool(
 		"getEvents",
-		mcp.WithDescription("Get events in the Kubernetes cluster"),
-		mcp.WithString("namespace", mcp.Description("The namespace to get events from")),
-		mcp.WithString("labelSelector", mcp.Description("A label selector to filter events")),
+		mcp.WithDescription("Get events in the Kubernetes cluster. Returns the most recent events by default."),
+		mcp.WithString("namespace", mcp.Description("The namespace to get events from. If empty, gets events from all namespaces.")),
+		mcp.WithNumber("maxEvents", mcp.Description("Maximum number of events to return (default: 20)")),
+		mcp.WithString("sortBy", mcp.Description("Field to sort events by. Options: 'lastTime' (default), 'firstTime'. Events are returned in descending order (most recent first).")),
 	)
 }
 

@@ -541,9 +541,10 @@ func (c *Client) GetNodeMetrics(ctx context.Context, nodeName string) (map[strin
 }
 
 // GetEvents retrieves events for a specific namespace or all namespaces.
-// It uses the corev1 clientset to fetch events, sorts them, and limits the results.
+// It uses the corev1 clientset to fetch events, filters by message content,
+// sorts them, and limits the results.
 // Returns a slice of maps, each representing an event, or an error.
-func (c *Client) GetEvents(ctx context.Context, namespace string, maxEvents int, sortBy string) ([]map[string]interface{}, error) {
+func (c *Client) GetEvents(ctx context.Context, namespace string, maxEvents int, sortBy string, messageFilter string) ([]map[string]interface{}, error) {
 	var eventList *corev1.EventList
 	var err error
 
@@ -586,7 +587,22 @@ func (c *Client) GetEvents(ctx context.Context, namespace string, maxEvents int,
 		return timeI.After(timeJ) // Descending order (most recent first)
 	})
 
-	// Limit the number of events returned
+	// Filter by message content if messageFilter is provided
+	if messageFilter != "" {
+		var filteredEvents []map[string]interface{}
+		lowerFilter := strings.ToLower(messageFilter)
+		
+		for _, event := range events {
+			if message, ok := event["message"].(string); ok {
+				if strings.Contains(strings.ToLower(message), lowerFilter) {
+					filteredEvents = append(filteredEvents, event)
+				}
+			}
+		}
+		events = filteredEvents
+	}
+
+	// Limit the number of events returned (after filtering)
 	if maxEvents > 0 && len(events) > maxEvents {
 		events = events[:maxEvents]
 	}

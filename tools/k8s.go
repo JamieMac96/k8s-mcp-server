@@ -109,14 +109,15 @@ func GetPodMetricsTool() mcp.Tool {
 
 // GetEventsTool creates a tool for getting events in the Kubernetes cluster.
 // It defines the tool's name, description, and parameters for the namespace,
-// maxEvents, and sortBy.
+// maxEvents, sortBy, and messageFilter.
 func GetEventsTool() mcp.Tool {
 	return mcp.NewTool(
 		"getEvents",
 		mcp.WithDescription("Get events in the Kubernetes cluster. Returns the most recent events by default."),
 		mcp.WithString("namespace", mcp.Description("The namespace to get events from. If empty, gets events from all namespaces.")),
-		mcp.WithNumber("maxEvents", mcp.Description("Maximum number of events to return (default: 20)")),
+		mcp.WithNumber("maxEvents", mcp.Description("Maximum number of events to return after filtering (default: 20)")),
 		mcp.WithString("sortBy", mcp.Description("Field to sort events by. Options: 'lastTime' (default), 'firstTime'. Events are returned in descending order (most recent first).")),
+		mcp.WithString("messageFilter", mcp.Description("Filter events by message content. Only events whose message contains this string (case-insensitive) will be returned.")),
 	)
 }
 

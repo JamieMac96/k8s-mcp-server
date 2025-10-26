@@ -372,11 +372,13 @@ Lists all instances of a specific resource type. Supports field projection to re
 
 Retrieves detailed information about a specific resource. Supports field projection to reduce response size.
 
+**⚠️ Important:** Full Pod/Deployment objects can be very large and may cause timeouts. **Always use `fieldPaths`** to specify only the fields you need.
+
 **Parameters:**
 - `kind` (string, required): The kind of resource to get (e.g., "Pod", "Deployment").
 - `name` (string, required): The name of the resource to get.
 - `namespace` (string, optional): The namespace of the resource (required for namespaced resources).
-- `fieldPaths` (string, optional): Comma-separated list of JSON paths to include in response (e.g., "metadata.name,status.phase"). If not specified, full object is returned. Use this to reduce response size.
+- `fieldPaths` (string, optional): Comma-separated list of JSON paths to include in response (e.g., "metadata.name,status.phase"). **Highly recommended to avoid timeouts.**
 
 **Example (basic):**
 ```json
@@ -413,7 +415,7 @@ Retrieves detailed information about a specific resource. Supports field project
 }
 ```
 
-**n8n Example:**
+**n8n Example (recommended with field projection):**
 ```json
 {
   "jsonrpc": "2.0",
@@ -422,10 +424,10 @@ Retrieves detailed information about a specific resource. Supports field project
   "params": {
     "name": "getResource",
     "arguments": {
-      "kind": "{{ $fromAI("kind", "the resource type") }}",
+      "kind": "{{ $fromAI("kind", "the resource type (e.g., Pod, Deployment, Service)") }}",
       "name": "{{ $fromAI("name", "the resource name") }}",
-      "namespace": "{{ $fromAI("namespace", "the namespace if any") }}",
-      "fieldPaths": "{{ $fromAI("fieldPaths", "comma-separated field paths like 'metadata.name,status.phase', leave empty for full object", "", "string", false) }}"
+      "namespace": "{{ $fromAI("namespace", "the namespace (leave empty for cluster-scoped resources)") }}",
+      "fieldPaths": "{{ $fromAI("fieldPaths", "IMPORTANT: comma-separated field paths to return (e.g., 'metadata.name,status.phase,status.conditions'). Always specify this to avoid timeouts with large resources.") }}"
     }
   }
 }
@@ -533,12 +535,13 @@ Retrieves CPU and Memory metrics for a specific pod.
 
 #### 8. `getEvents`
 
-Retrieves events from the Kubernetes cluster. Returns the most recent events by default, sorted and limited.
+Retrieves events from the Kubernetes cluster. Returns the most recent events by default, sorted and limited. Supports filtering by message content.
 
 **Parameters:**
 - `namespace` (string, optional): The namespace to get events from. If omitted, events from all namespaces are returned (subject to RBAC).
-- `maxEvents` (number, optional): Maximum number of events to return. Defaults to 20.
+- `maxEvents` (number, optional): Maximum number of events to return after filtering. Defaults to 20.
 - `sortBy` (string, optional): Field to sort events by. Options: `lastTime` (default), `firstTime`. Events are returned in descending order (most recent first).
+- `messageFilter` (string, optional): Filter events by message content. Only events whose message contains this string (case-insensitive) will be returned. The limit is applied after filtering.
 
 **Example (default - most recent 20 events):**
 ```json
@@ -585,6 +588,40 @@ Retrieves events from the Kubernetes cluster. Returns the most recent events by 
 }
 ```
 
+**Example (filter by message content):**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "getEvents",
+    "arguments": {
+      "messageFilter": "failed",
+      "maxEvents": 10
+    }
+  }
+}
+```
+
+**Example (combined filters):**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "getEvents",
+    "arguments": {
+      "namespace": "default",
+      "messageFilter": "error",
+      "sortBy": "lastTime",
+      "maxEvents": 20
+    }
+  }
+}
+```
+
 **n8n Example:**
 ```json
 {
@@ -595,8 +632,9 @@ Retrieves events from the Kubernetes cluster. Returns the most recent events by 
     "name": "getEvents",
     "arguments": {
       "namespace": "{{ $fromAI("namespace", "the namespace to get events from, leave empty for all namespaces", "", "string", false) }}",
-      "maxEvents": "{{ $fromAI("maxEvents", "maximum number of events to return", 20, "number", false) }}",
-      "sortBy": "{{ $fromAI("sortBy", "sort by 'lastTime' or 'firstTime'", "lastTime", "string", false) }}"
+      "maxEvents": "{{ $fromAI("maxEvents", "maximum number of events to return after filtering", 20, "number", false) }}",
+      "sortBy": "{{ $fromAI("sortBy", "sort by 'lastTime' or 'firstTime'", "lastTime", "string", false) }}",
+      "messageFilter": "{{ $fromAI("messageFilter", "filter events by message content (e.g. 'failed', 'error'), leave empty for no filtering", "", "string", false) }}"
     }
   }
 }

@@ -95,6 +95,8 @@ func projectFields(obj map[string]interface{}, fieldPaths []string) map[string]i
 // The result is serialized to JSON and returned.
 func GetAPIResources(client *k8s.Client) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		fmt.Printf("[GetAPIResources] START - Request: %#v\n", request.Params.Arguments)
+		
 		// Extract arguments
 		args, ok := request.Params.Arguments.(map[string]interface{})
 		if !ok {
@@ -104,18 +106,24 @@ func GetAPIResources(client *k8s.Client) func(ctx context.Context, request mcp.C
 		includeNamespaceScoped := getBoolArg(args, "includeNamespaceScoped", true)
 		includeClusterScoped := getBoolArg(args, "includeClusterScoped", true)
 
+		fmt.Printf("[GetAPIResources] Fetching resources (namespaced:%v, cluster:%v)...\n", includeNamespaceScoped, includeClusterScoped)
+		
 		// Fetch API resources
 		resources, err := client.GetAPIResources(ctx, includeNamespaceScoped, includeClusterScoped)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get API resources: %w", err)
 		}
 
+		fmt.Printf("[GetAPIResources] Found %d resources, marshaling...\n", len(resources))
+		
 		// Serialize response to JSON
 		jsonResponse, err := json.Marshal(resources)
 		if err != nil {
 			return nil, fmt.Errorf("failed to serialize response: %w", err)
 		}
 
+		fmt.Printf("[GetAPIResources] COMPLETE - Response size: %d bytes\n", len(jsonResponse))
+		
 		// Return JSON response using NewToolResultText
 		return mcp.NewToolResultText(string(jsonResponse)), nil
 	}
@@ -127,8 +135,7 @@ func GetAPIResources(client *k8s.Client) func(ctx context.Context, request mcp.C
 // to limit the size of returned data. The result is serialized to JSON and returned.
 func ListResources(client *k8s.Client) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		// LOG: Print incoming ListResources request arguments for debugging
-		fmt.Printf("[ListResources] Received request: Arguments=%#v\n", request.Params.Arguments)
+		fmt.Printf("[ListResources] START - Request: %#v\n", request.Params.Arguments)
 
 		// Extract arguments - using capital K to match your tools definition
 		args, ok := request.Params.Arguments.(map[string]interface{})
@@ -145,6 +152,8 @@ func ListResources(client *k8s.Client) func(ctx context.Context, request mcp.Cal
 		labelSelector := getStringArg(args, "labelSelector", "")
 		fieldPathsStr := getStringArg(args, "fieldPaths", "")
 
+		fmt.Printf("[ListResources] Parsed - kind:%s, namespace:%s, labelSelector:%s, fieldPaths:%s\n", kind, namespace, labelSelector, fieldPathsStr)
+
 		// Parse fieldPaths if provided
 		var fieldPaths []string
 		if fieldPathsStr != "" {
@@ -155,27 +164,33 @@ func ListResources(client *k8s.Client) func(ctx context.Context, request mcp.Cal
 			}
 		}
 
+		fmt.Printf("[ListResources] Fetching resources from K8s API...\n")
 		// Fetch resources (no fieldSelector, pass empty string)
 		resources, err := client.ListResources(ctx, kind, namespace, labelSelector, "")
 		if err != nil {
 			return nil, fmt.Errorf("failed to list resources for kind '%s': %w", kind, err)
 		}
+		fmt.Printf("[ListResources] Found %d resources\n", len(resources))
 
 		// Apply field projection if fieldPaths is specified
 		if len(fieldPaths) > 0 && len(resources) > 0 {
+			fmt.Printf("[ListResources] Applying field projection for %d paths...\n", len(fieldPaths))
 			projectedResources := make([]map[string]interface{}, len(resources))
 			for i, resource := range resources {
 				projectedResources[i] = projectFields(resource, fieldPaths)
 			}
 			resources = projectedResources
+			fmt.Printf("[ListResources] Field projection complete\n")
 		}
 
+		fmt.Printf("[ListResources] Marshaling to JSON...\n")
 		// Serialize response to JSON
 		jsonResponse, err := json.Marshal(resources)
 		if err != nil {
 			return nil, fmt.Errorf("failed to serialize response: %w", err)
 		}
 
+		fmt.Printf("[ListResources] COMPLETE - Response size: %d bytes\n", len(jsonResponse))
 		// Return JSON response using NewToolResultText
 		return mcp.NewToolResultText(string(jsonResponse)), nil
 	}
@@ -187,6 +202,8 @@ func ListResources(client *k8s.Client) func(ctx context.Context, request mcp.Cal
 // to limit the size of returned data. The result is serialized to JSON and returned.
 func GetResources(client *k8s.Client) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		fmt.Printf("[GetResource] START - Request: %#v\n", request.Params.Arguments)
+		
 		args, ok := request.Params.Arguments.(map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf("invalid arguments type: expected map[string]interface{}")
@@ -205,6 +222,8 @@ func GetResources(client *k8s.Client) func(ctx context.Context, request mcp.Call
 		namespace := getStringArg(args, "namespace", "")
 		fieldPathsStr := getStringArg(args, "fieldPaths", "")
 
+		fmt.Printf("[GetResource] Parsed args - kind:%s, name:%s, namespace:%s, fieldPaths:%s\n", kind, name, namespace, fieldPathsStr)
+
 		// Parse fieldPaths if provided
 		var fieldPaths []string
 		if fieldPathsStr != "" {
@@ -215,20 +234,26 @@ func GetResources(client *k8s.Client) func(ctx context.Context, request mcp.Call
 			}
 		}
 
+		fmt.Printf("[GetResource] Fetching resource from K8s API...\n")
 		resource, err := client.GetResource(ctx, kind, name, namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get resource '%s' of kind '%s': %w", name, kind, err)
 		}
+		fmt.Printf("[GetResource] Resource fetched successfully\n")
 
 		// Apply field projection if fieldPaths is specified
 		if len(fieldPaths) > 0 {
+			fmt.Printf("[GetResource] Applying field projection for %d paths...\n", len(fieldPaths))
 			resource = projectFields(resource, fieldPaths)
+			fmt.Printf("[GetResource] Field projection complete\n")
 		}
 
+		fmt.Printf("[GetResource] Marshaling to JSON...\n")
 		jsonResponse, err := json.Marshal(resource)
 		if err != nil {
 			return nil, fmt.Errorf("failed to serialize response: %w", err)
 		}
+		fmt.Printf("[GetResource] JSON marshaling complete, response size: %d bytes\n", len(jsonResponse))
 
 		return mcp.NewToolResultText(string(jsonResponse)), nil
 	}
@@ -240,6 +265,8 @@ func GetResources(client *k8s.Client) func(ctx context.Context, request mcp.Call
 // The result is serialized to JSON and returned.
 func DescribeResources(client *k8s.Client) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		fmt.Printf("[DescribeResource] START - Request: %#v\n", request.Params.Arguments)
+		
 		args, ok := request.Params.Arguments.(map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf("invalid arguments type: expected map[string]interface{}")
@@ -258,19 +285,22 @@ func DescribeResources(client *k8s.Client) func(ctx context.Context, request mcp
 
 		namespace := getStringArg(args, "namespace", "")
 
-		// Fetch resource description
-		resourceDescription, err := client.DescribeResource(ctx, kind, name, namespace)
+		fmt.Printf("[DescribeResource] Parsed - kind:%s, name:%s, namespace:%s\n", kind, name, namespace)
+		fmt.Printf("[DescribeResource] Fetching resource from K8s API...\n")
+		
+		resource, err := client.DescribeResource(ctx, kind, name, namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to describe resource '%s' of kind '%s': %w", name, kind, err)
 		}
+		fmt.Printf("[DescribeResource] Resource fetched successfully\n")
 
-		// Serialize response to JSON
-		jsonResponse, err := json.Marshal(resourceDescription)
+		fmt.Printf("[DescribeResource] Marshaling to JSON...\n")
+		jsonResponse, err := json.Marshal(resource)
 		if err != nil {
 			return nil, fmt.Errorf("failed to serialize response: %w", err)
 		}
 
-		// Return JSON response using NewToolResultText
+		fmt.Printf("[DescribeResource] COMPLETE - Response size: %d bytes\n", len(jsonResponse))
 		return mcp.NewToolResultText(string(jsonResponse)), nil
 	}
 }
@@ -280,6 +310,8 @@ func DescribeResources(client *k8s.Client) func(ctx context.Context, request mcp
 // provided name and namespace. The result is serialized to JSON and returned.
 func GetPodsLogs(client *k8s.Client) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		fmt.Printf("[GetPodsLogs] START - Request: %#v\n", request.Params.Arguments)
+		
 		args, ok := request.Params.Arguments.(map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf("invalid arguments type: expected map[string]interface{}")
@@ -298,11 +330,15 @@ func GetPodsLogs(client *k8s.Client) func(ctx context.Context, request mcp.CallT
 
 		containerName := getStringArg(args, "containerName", "")
 
+		fmt.Printf("[GetPodsLogs] Parsed - name:%s, namespace:%s, container:%s\n", name, namespace, containerName)
+		fmt.Printf("[GetPodsLogs] Fetching logs from K8s API...\n")
+		
 		logs, err := client.GetPodsLogs(ctx, namespace, containerName, name)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get logs for pod '%s': %w", name, err)
 		}
 
+		fmt.Printf("[GetPodsLogs] COMPLETE - Log size: %d bytes\n", len(logs))
 		// Return logs as plain text instead of JSON for better readability
 		return mcp.NewToolResultText(logs), nil
 	}
@@ -376,9 +412,11 @@ func GetPodMetrics(client *k8s.Client) func(ctx context.Context, request mcp.Cal
 
 // GetEvents returns a handler function for the getEvents tool.
 // It retrieves events from the Kubernetes cluster based on the provided
-// namespace, maxEvents, and sortBy parameters. The result is serialized to JSON and returned.
+// namespace, maxEvents, sortBy, and messageFilter parameters. The result is serialized to JSON and returned.
 func GetEvents(client *k8s.Client) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		fmt.Printf("[GetEvents] START - Request: %#v\n", request.Params.Arguments)
+		
 		args, ok := request.Params.Arguments.(map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf("invalid arguments type: expected map[string]interface{}")
@@ -386,23 +424,29 @@ func GetEvents(client *k8s.Client) func(ctx context.Context, request mcp.CallToo
 
 		namespace := getStringArg(args, "namespace", "")
 		sortBy := getStringArg(args, "sortBy", "lastTime")
-		
+		messageFilter := getStringArg(args, "messageFilter", "")
+
 		// Get maxEvents with default of 20
 		maxEvents := 20
 		if val, ok := args["maxEvents"].(float64); ok {
 			maxEvents = int(val)
 		}
 
-		events, err := client.GetEvents(ctx, namespace, maxEvents, sortBy)
+		fmt.Printf("[GetEvents] Parsed - namespace:%s, maxEvents:%d, sortBy:%s, messageFilter:%s\n", namespace, maxEvents, sortBy, messageFilter)
+		fmt.Printf("[GetEvents] Fetching events from K8s API...\n")
+		
+		events, err := client.GetEvents(ctx, namespace, maxEvents, sortBy, messageFilter)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get events: %w", err)
 		}
 
+		fmt.Printf("[GetEvents] Found %d events, marshaling...\n", len(events))
 		jsonResponse, err := json.Marshal(events)
 		if err != nil {
 			return nil, fmt.Errorf("failed to serialize events response: %w", err)
 		}
 
+		fmt.Printf("[GetEvents] COMPLETE - Response size: %d bytes\n", len(jsonResponse))
 		return mcp.NewToolResultText(string(jsonResponse)), nil
 	}
 }

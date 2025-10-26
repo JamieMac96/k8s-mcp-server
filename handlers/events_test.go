@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -158,5 +159,87 @@ func TestGetEvents(t *testing.T) {
 		}
 
 		t.Logf("Successfully retrieved %d events from kube-system namespace", len(events))
+	})
+
+	t.Run("Get events with message filter", func(t *testing.T) {
+		request := mcp.CallToolRequest{
+			Params: mcp.CallToolParams{
+				Name: "getEvents",
+				Arguments: map[string]interface{}{
+					"messageFilter": "failed",
+					"maxEvents":     float64(10),
+				},
+			},
+		}
+
+		result, err := handler(ctx, request)
+		if err != nil {
+			t.Fatalf("Failed to get events with message filter: %v", err)
+		}
+
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		if !ok {
+			t.Fatal("Expected TextContent in result")
+		}
+
+		var events []map[string]interface{}
+		if err := json.Unmarshal([]byte(textContent.Text), &events); err != nil {
+			t.Fatalf("Failed to parse events: %v", err)
+		}
+
+		// Verify all events contain "failed" in their message (case-insensitive)
+		for _, event := range events {
+			if message, ok := event["message"].(string); ok {
+				lowerMessage := strings.ToLower(message)
+				if !strings.Contains(lowerMessage, "failed") {
+					t.Errorf("Event message does not contain 'failed': %s", message)
+				}
+			}
+		}
+
+		t.Logf("Successfully retrieved %d events containing 'failed' in message", len(events))
+	})
+
+	t.Run("Get events with message filter and namespace", func(t *testing.T) {
+		request := mcp.CallToolRequest{
+			Params: mcp.CallToolParams{
+				Name: "getEvents",
+				Arguments: map[string]interface{}{
+					"namespace":     "default",
+					"messageFilter": "reconciliation",
+					"maxEvents":     float64(5),
+				},
+			},
+		}
+
+		result, err := handler(ctx, request)
+		if err != nil {
+			t.Fatalf("Failed to get events with message filter and namespace: %v", err)
+		}
+
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		if !ok {
+			t.Fatal("Expected TextContent in result")
+		}
+
+		var events []map[string]interface{}
+		if err := json.Unmarshal([]byte(textContent.Text), &events); err != nil {
+			t.Fatalf("Failed to parse events: %v", err)
+		}
+
+		// Verify all events are from default namespace and contain "reconciliation"
+		for _, event := range events {
+			if ns, ok := event["namespace"].(string); ok && ns != "default" {
+				t.Errorf("Expected event from default namespace, got %s", ns)
+			}
+			if message, ok := event["message"].(string); ok {
+				lowerMessage := strings.ToLower(message)
+				if !strings.Contains(lowerMessage, "reconciliation") {
+					t.Errorf("Event message does not contain 'reconciliation': %s", message)
+				}
+			}
+		}
+
+		t.Logf("Successfully retrieved %d events from default namespace containing 'reconciliation'", len(events))
 	})
 }
